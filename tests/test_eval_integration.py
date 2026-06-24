@@ -136,6 +136,15 @@ class EvalIntegrationTests(unittest.TestCase):
         cfg = EvalConfig(model_backend="eva01", pruners=["no_pruning"], keep_ratios=[1.0])
         validate_eva01_eval_config(cfg)
 
+    def test_eva01_mock_model_allows_baseline_pruners(self):
+        cfg = EvalConfig(
+            model_backend="eva01",
+            pruners=["random", "uniform", "divprune", "apet", "otprune", "tome", "fastv_mesh"],
+            keep_ratios=[0.75, 0.5],
+            mock_model=True,
+        )
+        validate_eva01_eval_config(cfg)
+
     def test_eva01_missing_dependency_error_is_lazy(self):
         if importlib.util.find_spec("eva01") is not None:
             self.skipTest("eva01 package is installed in this environment")

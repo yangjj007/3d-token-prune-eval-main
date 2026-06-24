@@ -43,6 +43,8 @@ class EvalConfig:
     mesh_cache_dir: str = ""
     mesh_cache_readonly: bool = False
     mesh_prefetch_workers: int = 2
+    # Debug-only path: skip model/VQVAE loading and emit deterministic captions.
+    mock_model: bool = False
     # Default: full bf16/fp16 VLM on GPU (matches typical inference). Use --load-in-4bit if VRAM is tight.
     load_in_4bit: bool = False
     # When not using 4bit: auto = bf16 if supported else fp16; or force float16 / bfloat16.
@@ -119,6 +121,11 @@ class EvalConfig:
             help="Thread workers to prefetch next sample coords (0=off).",
         )
         p.add_argument(
+            "--mock-model",
+            action="store_true",
+            help="Debug only: skip model/VQVAE loading and emit deterministic mock captions.",
+        )
+        p.add_argument(
             "--load-in-4bit",
             action="store_true",
             help="Load VLM in 4-bit NF4 (saves VRAM). Default is full bf16/fp16 on CUDA.",
@@ -160,6 +167,7 @@ class EvalConfig:
             mesh_cache_dir=args.mesh_cache_dir,
             mesh_cache_readonly=args.mesh_cache_readonly,
             mesh_prefetch_workers=args.mesh_prefetch_workers,
+            mock_model=args.mock_model,
             load_in_4bit=args.load_in_4bit,
             vlm_torch_dtype=args.vlm_torch_dtype,
             eval_config_dir=args.eval_config_dir,

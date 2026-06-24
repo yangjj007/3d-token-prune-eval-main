@@ -89,6 +89,13 @@ python -m eval.run_eval \
 - 默认 EVA01 checkpoint 为 `SEELE-AI/EVA01-2B-Instruct-LoRA`，可用 `--eva01-model-id` 覆盖。
 - 如需 LoRA base model 路径，可传 `--eva01-base-model-name-or-path`。
 - EVA01 后端当前只允许 `--pruners no_pruning --keep-ratios 1.0`；其他剪枝需要 EVA01 feature-pruning adapter。
+- For local CLI/output-contract debugging across all EVA01 baselines, use mock mode; it does not load or download any model:
+
+```bash
+bash scripts/run_eva01_baselines_debug.sh
+```
+
+The script runs `no_pruning,random,uniform,divprune,apet,otprune,tome,fastv_mesh` and writes outputs to `artifacts/eva01-baseline-debug/`.
 
 ## Baseline 融合状态
 

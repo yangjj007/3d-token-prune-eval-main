@@ -128,7 +128,9 @@ def load_llm(
 
 
 def validate_eva01_eval_config(cfg: EvalConfig) -> None:
-    """EVA01 v1 supports full-mesh caption eval only."""
+    """EVA01 v1 supports full-mesh caption eval only, except explicit mock debug runs."""
+    if cfg.mock_model:
+        return
     bad_pruners = [p for p in cfg.pruners if p != "no_pruning"]
     bad_ratios = [kr for kr in cfg.keep_ratios if abs(float(kr) - 1.0) > 1e-9]
     if bad_pruners or bad_ratios:
@@ -178,6 +180,24 @@ def _finalize_results(cfg: EvalConfig, results: list[dict], *, skipped_samples: 
     return 0 if ok else 1
 
 
+
+def _mock_eva01_caption(sample, pruner: str, keep_ratio: float) -> str:
+    if sample.captions:
+        return str(sample.captions[0])
+    return (
+        f"Mock EVA01 caption for {sample.file_identifier} "
+        f"using {pruner} at keep_ratio={float(keep_ratio):g}."
+    )
+
+
+def _mock_eva01_token_counts(pruner: str, keep_ratio: float) -> tuple[int, int]:
+    n_orig = 1024
+    if pruner == "no_pruning":
+        return n_orig, n_orig
+    n_pruned = max(1, min(n_orig, int(round(n_orig * float(keep_ratio)))))
+    return n_orig, n_pruned
+
+
 def _run_eva01_eval(
     cfg: EvalConfig,
     samples: list,
@@ -185,7 +205,11 @@ def _run_eva01_eval(
     processor,
     device: torch.device,
 ) -> list[dict]:
-    from eval.eva01_backend import generate_eva01_caption
+    generate_eva01_caption = None
+    if not cfg.mock_model:
+        from eval.eva01_backend import generate_eva01_caption as _generate_eva01_caption
+
+        generate_eva01_caption = _generate_eva01_caption
 
     results: list[dict] = []
     sample_iter = enumerate(samples)
@@ -205,21 +229,31 @@ def _run_eva01_eval(
                 try:
                     step_label = f"{pname} kr={kr}"
                     t_gen = time.monotonic()
-                    log_phase(f"EVA01 generate {step_label} glb={sample.glb_path}")
-                    caption, elapsed, n_in, n_out, mesh_count = generate_eva01_caption(
-                        model,
-                        processor,
-                        sample.glb_path,
-                        cfg.caption_prompt,
-                        max_new_tokens=cfg.max_new_tokens,
-                        temperature=cfg.temperature,
-                        top_p=cfg.top_p,
-                        top_k=cfg.top_k,
-                        device=device,
-                    )
+                    if cfg.mock_model:
+                        log_phase(f"EVA01 mock generate {step_label} glb={sample.glb_path}")
+                        mesh_count, pruned_count = _mock_eva01_token_counts(pname, float(kr))
+                        caption = _mock_eva01_caption(sample, pname, float(kr))
+                        elapsed = time.monotonic() - t_gen
+                        n_in = 37 + pruned_count
+                        n_out = max(1, len(caption.split()))
+                    else:
+                        log_phase(f"EVA01 generate {step_label} glb={sample.glb_path}")
+                        assert generate_eva01_caption is not None
+                        caption, elapsed, n_in, n_out, mesh_count = generate_eva01_caption(
+                            model,
+                            processor,
+                            sample.glb_path,
+                            cfg.caption_prompt,
+                            max_new_tokens=cfg.max_new_tokens,
+                            temperature=cfg.temperature,
+                            top_p=cfg.top_p,
+                            top_k=cfg.top_k,
+                            device=device,
+                        )
+                        pruned_count = mesh_count
                     log_phase(
-                        f"EVA01 generate {step_label} done ({time.monotonic() - t_gen:.1f}s, "
-                        f"out_tokens={n_out})"
+                        f"EVA01 {'mock ' if cfg.mock_model else ''}generate {step_label} done "
+                        f"({time.monotonic() - t_gen:.1f}s, out_tokens={n_out})"
                     )
                     scores = compute_text_metrics(caption, sample.captions)
                     llm_tf = estimate_llm_tflops(n_in, n_out, cfg.eva01_model_id) if n_in else {
@@ -236,15 +270,16 @@ def _run_eva01_eval(
                             "pruner": pname,
                             "keep_ratio": float(kr),
                             "num_tokens_original": mesh_count,
-                            "num_tokens_pruned": mesh_count,
+                            "num_tokens_pruned": pruned_count,
                             "generation_time_sec": float(elapsed),
                             "num_input_tokens": int(n_in),
                             "num_output_tokens": int(n_out),
                             "pruner_tflops": 0.0,
                             "generated_caption": caption,
                             "pruner_metadata": {
-                                "method": "eva01_no_pruning",
+                                "method": f"eva01_{'mock_' if cfg.mock_model else ''}{pname}",
                                 "backend": "eva01",
+                                "mock_model": bool(cfg.mock_model),
                                 "mesh_value_count": mesh_count,
                             },
                             **llm_tf,
@@ -313,7 +348,9 @@ def main(argv: list[str] | None = None) -> int:
     processor = None
     tokenizer = None
     try:
-        if cfg.model_backend == "eva01":
+        if cfg.model_backend == "eva01" and cfg.mock_model:
+            print("Using EVA01 mock model: no OpenEVA import, no checkpoint download, no GPU model load.")
+        elif cfg.model_backend == "eva01":
             from eval.eva01_backend import load_eva01_model
 
             print(f"Loading EVA01 ({cfg.eva01_model_id}) on {device}...")
