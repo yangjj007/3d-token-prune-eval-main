@@ -83,6 +83,26 @@ python -m eval.run_eval \
   --device cuda:0
 ```
 
+Formal EVA01 baseline launch command (real model; loads OpenEVA and the EVA01 checkpoint):
+
+```bash
+mkdir -p "eval_results_eva01/logs"
+SHAPELLM_ENABLE_SEMANTIC_METRICS=0 python -u -m eval.run_eval \
+  --model-backend eva01 \
+  --data-csv data/metadata.csv \
+  --glb-dir data \
+  --num-samples -1 \
+  --output-dir "eval_results_eva01" \
+  --pruners no_pruning \
+  --keep-ratios 1.0 \
+  --device cuda:0 \
+  --vlm-torch-dtype bfloat16 \
+  --seed 42 \
+  2>&1 | tee "eval_results_eva01/eval_run.log"
+```
+
+If your local OpenEVA LoRA setup requires an explicit base model, add `--eva01-base-model-name-or-path /path/to/base-model`.
+
 说明：
 
 - EVA01 后端需要额外安装 OpenEVA，并确保 Python 可 `import eva01`。
