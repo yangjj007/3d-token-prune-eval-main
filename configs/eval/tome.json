@@ -1,0 +1,4 @@
+{
+  "merge_mode": "mean",
+  "max_rounds": 256
+}

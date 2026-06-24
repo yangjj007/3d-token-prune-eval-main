@@ -1,0 +1,11 @@
+{
+  "gamma": 0.01,
+  "epsilon": 1e-10,
+  "use_embedding": true,
+  "empty_quality_scale": 0.08,
+  "surface_quality": 1.0,
+  "filled_quality": 0.55,
+  "entropy_weight": 0.35,
+  "rarity_weight": 0.25,
+  "min_quality": 0.0001
+}

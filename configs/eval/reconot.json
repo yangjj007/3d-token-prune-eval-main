@@ -1,0 +1,16 @@
+{
+  "gamma": 0.01,
+  "epsilon": 1e-10,
+  "n_basis": 64,
+  "ridge_lambda": 1e-3,
+  "recon_weight": 0.5,
+  "rarity_weight": 0.25,
+  "selector": "dpp",
+  "sinkhorn_eps": 0.05,
+  "sinkhorn_iters": 80,
+  "ot_refine_dpp": true,
+  "codebook_accelerate": true,
+  "ot_per_id_cap": 1,
+  "per_id_cap": 1,
+  "fast_diagnostics": true
+}

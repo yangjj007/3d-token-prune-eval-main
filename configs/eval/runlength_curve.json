@@ -1,0 +1,15 @@
+{
+  "curve_type": "hilbert",
+  "adaptive_epsilon": true,
+  "epsilon": 1.5,
+  "epsilon_pct": 1.0,
+  "target_run_ratio": 1.0,
+  "max_run_len": 32,
+  "d_block_weight": 0.5,
+  "run_coverage_alpha": 0.5,
+  "surface_source": "voxel",
+  "boundary_bonus_scale": 0.25,
+  "base_reserve_ratio": 0.2,
+  "eps_clip_lo_mult": 0.3,
+  "eps_clip_hi_mult": 1.2
+}

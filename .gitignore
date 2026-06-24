@@ -1,0 +1,39 @@
+﻿# Python caches
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local IDE / app state
+.vs/
+.vscode/
+.idea/
+.gradio/
+
+# Large datasets and generated evaluation artifacts
+data/
+eval_results*/
+artifacts/
+logs/
+*.zip
+
+# Model/checkpoint artifacts
+*.ckpt
+*.pt
+*.pth
+*.safetensors
+*.bin
+
+# Local environment files and secrets
+.env
+.env.*
+*.key
+*.pem
+*.token
+
+# Temporary outputs
+tmp/
+temp/
+*.log

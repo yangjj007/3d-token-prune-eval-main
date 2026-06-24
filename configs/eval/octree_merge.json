@@ -1,0 +1,13 @@
+{
+  "adaptive_tau": true,
+  "tau_merge": 0.5,
+  "tau_pct": 1.0,
+  "similarity_metric": "l2",
+  "surface_source": "voxel",
+  "surface_tau_scale": 0.7,
+  "geometry_complex_min_unique": 4,
+  "geom_complex_bonus_scale": 0.5,
+  "score_alpha": 0.3,
+  "boundary_bonus_scale": 0.2,
+  "base_reserve_ratio": 0.2
+}
