@@ -7,13 +7,7 @@ from typing import Any, Callable, Dict, Tuple
 
 import torch
 
-from eval.baseline._common import (
-    MESH_SEQ_LEN,
-    gather_embeddings,
-    nearest_codebook_ids,
-    require_vq_embeddings,
-    target_keep_count,
-)
+from eval.baseline._common import gather_embeddings, nearest_codebook_ids, require_vq_embeddings, target_keep_count
 from eval.pruners import BasePruner, register_pruner
 
 
@@ -83,8 +77,9 @@ class ToMePruner(BasePruner):
         max_rounds = int(self.extra.get("max_rounds", 256))
 
         t = token_ids.detach().long().view(-1)
-        assert t.numel() == MESH_SEQ_LEN
-        k_target = target_keep_count(self.keep_ratio)
+        if t.numel() <= 0:
+            raise ValueError("tome received an empty token sequence")
+        k_target = target_keep_count(self.keep_ratio, int(t.numel()))
 
         emb = gather_embeddings(embed, t).unsqueeze(0)
         rounds = 0

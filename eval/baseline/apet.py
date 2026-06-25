@@ -6,7 +6,7 @@ from typing import Any, Dict, Literal, Tuple
 
 import torch
 
-from eval.baseline._common import MESH_SEQ_LEN, gather_embeddings, require_vq_embeddings, target_keep_count
+from eval.baseline._common import gather_embeddings, require_vq_embeddings, target_keep_count
 from eval.pruners import BasePruner, register_pruner
 
 
@@ -57,8 +57,9 @@ class ApETPruner(BasePruner):
     ) -> Tuple[torch.Tensor, Dict[str, Any]]:
         embed = require_vq_embeddings(kwargs.get("vq_embeddings"))
         t = token_ids.detach().long().view(-1)
-        assert t.numel() == MESH_SEQ_LEN
-        k_keep = target_keep_count(self.keep_ratio)
+        if t.numel() <= 0:
+            raise ValueError("apet received an empty token sequence")
+        k_keep = target_keep_count(self.keep_ratio, int(t.numel()))
         basis_token_num = int(self.extra.get("basis_token_num", max(1, min(32, k_keep // 4))))
         basis_token_num = max(1, min(basis_token_num, k_keep))
         selection_method: Literal["fps", "random"] = self.extra.get("selection_method", "fps")

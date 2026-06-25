@@ -6,19 +6,13 @@ from typing import Any, Dict, Tuple
 
 import torch
 
+from eval.baseline._common import target_keep_count
 from eval.pruners import BasePruner, register_pruner
-
-MESH_SEQ_LEN = 1024
-
-
-def _target_keep_count(keep_ratio: float) -> int:
-    k = max(1, int(round(MESH_SEQ_LEN * float(keep_ratio))))
-    return min(k, MESH_SEQ_LEN)
 
 
 @register_pruner("no_pruning")
 class NoPruningPruner(BasePruner):
-    """Keep all 1024 VQ tokens (performance upper bound). ``keep_ratio`` is ignored."""
+    """Keep all input tokens (performance upper bound). ``keep_ratio`` is ignored."""
 
     def prune(
         self,
@@ -27,8 +21,10 @@ class NoPruningPruner(BasePruner):
         **kwargs: Any,
     ) -> Tuple[torch.Tensor, Dict[str, Any]]:
         t = token_ids.detach().long().view(-1)
-        assert t.numel() == MESH_SEQ_LEN, f"Expected {MESH_SEQ_LEN} tokens, got {t.numel()}"
-        meta = {"indices": list(range(MESH_SEQ_LEN)), "method": "no_pruning"}
+        n = int(t.numel())
+        if n <= 0:
+            raise ValueError("no_pruning received an empty token sequence")
+        meta = {"indices": list(range(n)), "method": "no_pruning", "k": n}
         return t.clone(), meta
 
 
@@ -43,11 +39,13 @@ class RandomPruningPruner(BasePruner):
         **kwargs: Any,
     ) -> Tuple[torch.Tensor, Dict[str, Any]]:
         t = token_ids.detach().long().view(-1)
-        assert t.numel() == MESH_SEQ_LEN
-        k = _target_keep_count(self.keep_ratio)
+        n = int(t.numel())
+        if n <= 0:
+            raise ValueError("random received an empty token sequence")
+        k = target_keep_count(self.keep_ratio, n)
         g = torch.Generator(device=t.device)
         g.manual_seed(self.seed)
-        perm = torch.randperm(MESH_SEQ_LEN, generator=g, device=t.device)[:k]
+        perm = torch.randperm(n, generator=g, device=t.device)[:k]
         idx = perm.sort().values
         pruned = t[idx]
         meta = {
@@ -60,7 +58,7 @@ class RandomPruningPruner(BasePruner):
 
 @register_pruner("uniform")
 class UniformDownsamplingPruner(BasePruner):
-    """Uniformly spaced indices over [0, 1023]."""
+    """Uniformly spaced indices over the input sequence."""
 
     def prune(
         self,
@@ -69,26 +67,28 @@ class UniformDownsamplingPruner(BasePruner):
         **kwargs: Any,
     ) -> Tuple[torch.Tensor, Dict[str, Any]]:
         t = token_ids.detach().long().view(-1)
-        assert t.numel() == MESH_SEQ_LEN
-        k = _target_keep_count(self.keep_ratio)
-        if k == MESH_SEQ_LEN:
-            idx = torch.arange(MESH_SEQ_LEN, device=t.device, dtype=torch.long)
+        n = int(t.numel())
+        if n <= 0:
+            raise ValueError("uniform received an empty token sequence")
+        k = target_keep_count(self.keep_ratio, n)
+        if k == n:
+            idx = torch.arange(n, device=t.device, dtype=torch.long)
         elif k == 1:
-            idx = torch.tensor([MESH_SEQ_LEN // 2], device=t.device, dtype=torch.long)
+            idx = torch.tensor([n // 2], device=t.device, dtype=torch.long)
         else:
-            # Evenly spaced indices in [0, MESH_SEQ_LEN - 1]
-            step = (MESH_SEQ_LEN - 1) / (k - 1)
+            # Evenly spaced indices in [0, n - 1]
+            step = (n - 1) / (k - 1)
             raw = [round(i * step) for i in range(k)]
             seen: set[int] = set()
             ordered: list[int] = []
             for x in raw:
-                x = max(0, min(MESH_SEQ_LEN - 1, int(x)))
+                x = max(0, min(n - 1, int(x)))
                 if x not in seen:
                     seen.add(x)
                     ordered.append(x)
             # Pad if duplicates removed
             p = 0
-            while len(ordered) < k and p < MESH_SEQ_LEN:
+            while len(ordered) < k and p < n:
                 if p not in seen:
                     ordered.append(p)
                     seen.add(p)

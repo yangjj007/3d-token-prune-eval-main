@@ -69,7 +69,7 @@ python -m eval.run_eval \
 python -m eval.run_eval --model-backend shapellm ...
 ```
 
-EVA01 第一版只接入公开 mesh understanding / caption 评估路径，不对 EVA01 内部 mesh feature 做剪枝：
+EVA01 后端现在支持同一套 token prune 注册表。普通 embedding 方法直接剪 EVA01 的 512 个 mesh patch token；空间方法会按需加载 VQVAE，先在 1024 latent token 上运行原 pruner，再映射回 EVA01 patch token：
 
 ```bash
 python -m eval.run_eval \
@@ -78,9 +78,10 @@ python -m eval.run_eval \
   --glb-dir data \
   --num-samples 10 \
   --output-dir eval_results_eva01 \
-  --pruners no_pruning \
-  --keep-ratios 1.0 \
-  --device cuda:0
+  --pruners no_pruning,random,uniform,divprune,apet,otprune,tome,fastv_mesh,loco3d,octree_merge,runlength_curve,reconot,loco3d_dpp,loco3d_nonempty_dpp \
+  --keep-ratios 1.0,0.75,0.5,0.25,0.1 \
+  --device cuda:0 \
+  --vqvae-device cuda:1
 ```
 
 Formal EVA01 baseline launch command (real model; loads OpenEVA and the EVA01 checkpoint):
@@ -93,9 +94,10 @@ SHAPELLM_ENABLE_SEMANTIC_METRICS=0 python -u -m eval.run_eval \
   --glb-dir data \
   --num-samples -1 \
   --output-dir "eval_results_eva01" \
-  --pruners no_pruning \
-  --keep-ratios 1.0 \
+  --pruners no_pruning,random,uniform,divprune,apet,otprune,tome,fastv_mesh,loco3d,octree_merge,runlength_curve,reconot,loco3d_dpp,loco3d_nonempty_dpp \
+  --keep-ratios 1.0,0.75,0.5,0.25,0.1 \
   --device cuda:0 \
+  --vqvae-device cuda:1 \
   --vlm-torch-dtype bfloat16 \
   --seed 42 \
   2>&1 | tee "eval_results_eva01/eval_run.log"
@@ -108,22 +110,24 @@ If your local OpenEVA LoRA setup requires an explicit base model, add `--eva01-b
 - EVA01 后端需要额外安装 OpenEVA，并确保 Python 可 `import eva01`。
 - 默认 EVA01 checkpoint 为 `SEELE-AI/EVA01-2B-Instruct-LoRA`，可用 `--eva01-model-id` 覆盖。
 - 如需 LoRA base model 路径，可传 `--eva01-base-model-name-or-path`。
-- EVA01 后端当前只允许 `--pruners no_pruning --keep-ratios 1.0`；其他剪枝需要 EVA01 feature-pruning adapter。
+- EVA01 后端会固定保留 cls mesh token，并在 512 个 patch token 上按 `keep_ratio` 剪枝；`no_pruning` 仍只在 `keep_ratio=1.0` 下运行。
+- `loco3d*`、`octree_merge`、`runlength_curve`、`reconot` 需要 VQVAE 空间 token，请传 `--vqvae-device`；其他 EVA01 patch-embedding 方法不需要额外加载 VQVAE。
 - For local CLI/output-contract debugging across all EVA01 baselines, use mock mode; it does not load or download any model:
 
 ```bash
 bash scripts/run_eva01_baselines_debug.sh
 ```
 
-The script runs `no_pruning,random,uniform,divprune,apet,otprune,tome,fastv_mesh` and writes outputs to `artifacts/eva01-baseline-debug/`.
+The script runs all registered EVA01 baseline/proposed pruners and writes outputs to `artifacts/eva01-baseline-debug/`.
 
 ## Baseline 融合状态
 
 | 类别 | 方法 | 状态 |
 |------|------|------|
-| 直接接入 | `no_pruning`, `random`, `uniform` | 已按 1024 mesh token index 选择接入 |
-| 直接接入 | `divprune`, `apet`, `otprune`, `tome`, `fastv_mesh` | 已按 ShapeLLM VQ embedding / token 序列代理接入 |
-| 需代理特征 | EVA01 内部 mesh feature pruning、attention-based FastV 变体 | 需要模型内部 feature/attention adapter 后再接入 |
+| ShapeLLM 直接接入 | `no_pruning`, `random`, `uniform`, `divprune`, `apet`, `otprune`, `tome`, `fastv_mesh` | 支持 1024 VQVAE token / embedding 序列 |
+| EVA01 直接接入 | `no_pruning`, `random`, `uniform`, `divprune`, `apet`, `otprune`, `tome`, `fastv_mesh` | 支持 EVA01 原生 512 patch-like mesh embedding，cls token 固定保留 |
+| EVA01 空间映射接入 | `loco3d`, `octree_merge`, `runlength_curve`, `reconot`, `loco3d_dpp`, `loco3d_nonempty_dpp` | 先跑 1024 VQVAE 空间 pruner，再最近邻映射到 EVA01 patch token |
+| 需代理特征 | attention-based FastV 变体 | 需要模型内部 attention adapter 后再接入 |
 | 暂不兼容 | 模型权重剪枝、点云网络压缩、场景级 3D pruning | 不满足 `BasePruner.prune(token_ids, voxel_grid, vq_embeddings=...)` 契约 |
 
 ## 精简命令（loco3d）

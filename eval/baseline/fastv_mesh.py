@@ -10,7 +10,7 @@ from typing import Any, Dict, Tuple
 
 import torch
 
-from eval.baseline._common import MESH_SEQ_LEN, gather_embeddings, require_vq_embeddings, target_keep_count
+from eval.baseline._common import gather_embeddings, require_vq_embeddings, target_keep_count
 from eval.pruners import BasePruner, register_pruner
 
 
@@ -26,8 +26,9 @@ class FastVMeshPruner(BasePruner):
         query_mode = str(self.extra.get("query_mode", "mean"))
 
         t = token_ids.detach().long().view(-1)
-        assert t.numel() == MESH_SEQ_LEN
-        k = target_keep_count(self.keep_ratio)
+        if t.numel() <= 0:
+            raise ValueError("fastv_mesh received an empty token sequence")
+        k = target_keep_count(self.keep_ratio, int(t.numel()))
         feats = gather_embeddings(embed, t)
 
         if query_mode == "last":

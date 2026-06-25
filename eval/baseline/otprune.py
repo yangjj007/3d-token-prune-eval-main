@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Tuple
 import torch
 from torch import Tensor
 
-from eval.baseline._common import MESH_SEQ_LEN, gather_embeddings, require_vq_embeddings, target_keep_count
+from eval.baseline._common import gather_embeddings, require_vq_embeddings, target_keep_count
 from eval.pruners import BasePruner, register_pruner
 
 
@@ -93,7 +93,8 @@ class OTPrunePruner(BasePruner):
         epsilon = float(self.extra.get("epsilon", 1e-10))
 
         t = token_ids.detach().long().view(-1)
-        assert t.numel() == MESH_SEQ_LEN
+        if t.numel() <= 0:
+            raise ValueError("otprune received an empty token sequence")
         feats = gather_embeddings(embed, t)
         idx = otprune_select(feats, self.keep_ratio, gamma=gamma, epsilon=epsilon)
         idx = idx.sort().values
