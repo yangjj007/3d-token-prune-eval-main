@@ -27,6 +27,12 @@ PRUNERS=(
   otprune
   tome
   fastv_mesh
+  loco3d
+  octree_merge
+  runlength_curve
+  reconot
+  loco3d_dpp
+  loco3d_nonempty_dpp
 )
 
 mkdir -p "$OUT_ROOT"

@@ -128,13 +128,16 @@ class EvalIntegrationTests(unittest.TestCase):
         self.assertAlmostEqual(0.9, extras["sentence_bert_mean"])
         self.assertAlmostEqual(0.8, extras["simcse_mean"])
 
-    def test_eva01_validation_rejects_pruning(self):
+    def test_eva01_validation_allows_pruning(self):
         cfg = EvalConfig(model_backend="eva01", pruners=["random"], keep_ratios=[0.5])
-        with self.assertRaises(ValueError):
-            validate_eva01_eval_config(cfg)
+        validate_eva01_eval_config(cfg)
 
         cfg = EvalConfig(model_backend="eva01", pruners=["no_pruning"], keep_ratios=[1.0])
         validate_eva01_eval_config(cfg)
+
+        cfg = EvalConfig(model_backend="eva01", pruners=[], keep_ratios=[1.0])
+        with self.assertRaises(ValueError):
+            validate_eva01_eval_config(cfg)
 
     def test_eva01_mock_model_allows_baseline_pruners(self):
         cfg = EvalConfig(

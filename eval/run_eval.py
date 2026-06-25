@@ -49,6 +49,15 @@ from eval.cuda_env import (
     warmup_vqvae,
 )
 from eval.data_loader import iter_dataset, mesh_to_tokens, prepare_mesh_coords
+from eval.eva01_backend import (
+    EVA01_VQVAE_SPATIAL_PRUNERS,
+    extract_eva01_mesh_features,
+    generate_eva01_caption_from_mesh_tokens,
+    map_vq_indices_to_eva_patches,
+    prune_eva01_patch_embeddings,
+    select_eva01_mesh_tokens,
+    target_eva01_patch_count,
+)
 from eval.generator import generate_caption
 from eval.progress import log_phase, phase_timer, progress_enabled
 from eval.flops import enrich_pruner_metadata_flops, estimate_llm_tflops
@@ -128,23 +137,13 @@ def load_llm(
 
 
 def validate_eva01_eval_config(cfg: EvalConfig) -> None:
-    """EVA01 v1 supports full-mesh caption eval only, except explicit mock debug runs."""
-    if cfg.mock_model:
-        return
-    bad_pruners = [p for p in cfg.pruners if p != "no_pruning"]
-    bad_ratios = [kr for kr in cfg.keep_ratios if abs(float(kr) - 1.0) > 1e-9]
-    if bad_pruners or bad_ratios:
-        details = []
-        if bad_pruners:
-            details.append(f"unsupported pruners={bad_pruners}")
-        if bad_ratios:
-            details.append(f"unsupported keep_ratios={bad_ratios}")
-        raise ValueError(
-            "EVA01 backend v1 only supports full mesh caption eval: "
-            "--pruners no_pruning --keep-ratios 1.0. "
-            "EVA01 internal mesh-feature pruning needs a separate adapter. "
-            + "; ".join(details)
-        )
+    """Validate EVA01 eval options.
+
+    Real EVA01 pruning is implemented through the patch-embedding adapter. Unknown
+    pruner names are already rejected before this function is called.
+    """
+    if not cfg.pruners:
+        raise ValueError("EVA01 eval requires at least one pruner.")
 
 
 def _finalize_results(cfg: EvalConfig, results: list[dict], *, skipped_samples: int = 0) -> int:
@@ -191,11 +190,11 @@ def _mock_eva01_caption(sample, pruner: str, keep_ratio: float) -> str:
 
 
 def _mock_eva01_token_counts(pruner: str, keep_ratio: float) -> tuple[int, int]:
-    n_orig = 1024
+    n_orig = 513
     if pruner == "no_pruning":
         return n_orig, n_orig
-    n_pruned = max(1, min(n_orig, int(round(n_orig * float(keep_ratio)))))
-    return n_orig, n_pruned
+    n_patch = target_eva01_patch_count(float(keep_ratio), 512)
+    return n_orig, 1 + n_patch
 
 
 def _run_eva01_eval(
@@ -204,12 +203,25 @@ def _run_eva01_eval(
     model,
     processor,
     device: torch.device,
+    *,
+    vqvae=None,
+    vqvae_dev: torch.device = torch.device("cpu"),
+    eval_cfg_dir: Path | None = None,
 ) -> list[dict]:
-    generate_eva01_caption = None
-    if not cfg.mock_model:
-        from eval.eva01_backend import generate_eva01_caption as _generate_eva01_caption
+    eval_cfg_dir = eval_cfg_dir or Path(cfg.eval_config_dir)
+    uses_spatial_vq = any(p in EVA01_VQVAE_SPATIAL_PRUNERS for p in cfg.pruners)
+    vq_emb = getattr(getattr(vqvae, "vq", None), "embeddings", None) if vqvae is not None else None
+    vq_embed_dim = int(vq_emb.weight.shape[1]) if vq_emb is not None else 32
+    vq_codebook_size = int(vq_emb.weight.shape[0]) if vq_emb is not None else 8192
 
-        generate_eva01_caption = _generate_eva01_caption
+    os.environ.setdefault("SHAPELLM_EVAL_LOG_DIR", os.path.join(cfg.output_dir, "logs"))
+    os.environ.setdefault("SHAPELLM_EVAL_LOG_DEEP_EVERY", "20")
+    os.makedirs(os.environ["SHAPELLM_EVAL_LOG_DIR"], exist_ok=True)
+    if uses_spatial_vq:
+        print(
+            f"EVA01 spatial-pruner diagnostics -> SHAPELLM_EVAL_LOG_DIR={os.environ['SHAPELLM_EVAL_LOG_DIR']} "
+            f"(deep_every={os.environ['SHAPELLM_EVAL_LOG_DEEP_EVERY']})"
+        )
 
     results: list[dict] = []
     sample_iter = enumerate(samples)
@@ -224,8 +236,29 @@ def _run_eva01_eval(
     )
     for si, sample in sample_iter:
         print(f"[{si+1}/{len(samples)}] {sample.file_identifier}", flush=True)
+        eva_features = None
+        feature_error = None
+        token_ids = None
+        voxel_grid = None
+        if not cfg.mock_model:
+            try:
+                with phase_timer(f"EVA01 mesh encoder glb={sample.glb_path}"):
+                    eva_features = extract_eva01_mesh_features(
+                        model,
+                        processor,
+                        sample.glb_path,
+                        cfg.caption_prompt,
+                        device=device,
+                    )
+            except Exception:
+                feature_error = traceback.format_exc()
+                print(feature_error, file=sys.stderr)
+
         for pname in cfg.pruners:
+            Pruner = get_pruner_class(pname)
             for kr in cfg.keep_ratios:
+                if pname == "no_pruning" and kr < 1.0 - 1e-9:
+                    continue
                 try:
                     step_label = f"{pname} kr={kr}"
                     t_gen = time.monotonic()
@@ -236,13 +269,104 @@ def _run_eva01_eval(
                         elapsed = time.monotonic() - t_gen
                         n_in = 37 + pruned_count
                         n_out = max(1, len(caption.split()))
+                        meta = {
+                            "method": f"eva01_mock_{pname}",
+                            "backend": "eva01",
+                            "mock_model": True,
+                            "mesh_value_count": mesh_count,
+                        }
+                        pruner_tf = 0.0
                     else:
-                        log_phase(f"EVA01 generate {step_label} glb={sample.glb_path}")
-                        assert generate_eva01_caption is not None
-                        caption, elapsed, n_in, n_out, mesh_count = generate_eva01_caption(
+                        if feature_error is not None:
+                            raise RuntimeError(f"EVA01 mesh feature extraction failed:\n{feature_error}")
+                        if eva_features is None:
+                            raise RuntimeError("EVA01 mesh features were not initialized")
+
+                        extra = load_pruner_extra_kwargs(eval_cfg_dir, pname)
+                        pruner = Pruner(keep_ratio=kr, seed=cfg.seed, **extra)
+                        if pname in EVA01_VQVAE_SPATIAL_PRUNERS:
+                            if vqvae is None or vq_emb is None:
+                                raise RuntimeError(
+                                    f"EVA01 spatial pruner {pname!r} requires VQVAE; "
+                                    "set --vqvae-device and ensure VQVAE loads."
+                                )
+                            if token_ids is None or voxel_grid is None:
+                                with phase_timer(f"EVA01 spatial VQVAE tokens glb={sample.glb_path}"):
+                                    token_ids, voxel_grid = mesh_to_tokens(
+                                        sample.glb_path,
+                                        vqvae,
+                                        vqvae_dev,
+                                        file_identifier=sample.file_identifier,
+                                        mesh_cache_dir=cfg.mesh_cache_dir,
+                                        mesh_cache_readonly=cfg.mesh_cache_readonly,
+                                        vlm_device=device,
+                                    )
+                            with phase_timer(f"EVA01 prune {step_label} (VQVAE spatial)"):
+                                _pruned_vq_ids, meta = pruner.prune(
+                                    token_ids,
+                                    voxel_grid,
+                                    vq_embeddings=vq_emb,
+                                    _log_sample_idx=si,
+                                    _log_tag=sample.file_identifier,
+                                    _log_keep_ratio=float(kr),
+                                )
+                            meta = dict(meta)
+                            enrich_pruner_metadata_flops(
+                                pname,
+                                meta,
+                                embed_dim=vq_embed_dim,
+                                codebook_size=vq_codebook_size,
+                            )
+                            vq_indices = meta.get("indices")
+                            if vq_indices is None:
+                                raise ValueError(f"Spatial pruner {pname!r} did not return meta['indices']")
+                            patch_target = target_eva01_patch_count(float(kr), eva_features.patch_count)
+                            patch_indices, mapping_diag = map_vq_indices_to_eva_patches(
+                                vq_indices,
+                                eva_features.patch_centers,
+                                target_count=patch_target,
+                                num_patches=eva_features.patch_count,
+                            )
+                            meta.update(
+                                {
+                                    "backend": "eva01",
+                                    "eva01_adapter": "vqvae_spatial_to_patch_embeddings",
+                                    "vq_indices": [int(x) for x in vq_indices],
+                                    "eva_patch_indices": patch_indices,
+                                    "num_eva_patches_original": eva_features.patch_count,
+                                    "num_eva_patches_pruned": len(patch_indices),
+                                    "vq_to_eva_mapping": mapping_diag,
+                                }
+                            )
+                            embed_dim = vq_embed_dim
+                            codebook_size = vq_codebook_size
+                        else:
+                            with phase_timer(f"EVA01 prune {step_label} (patch embeddings)"):
+                                patch_indices, meta, local_embed = prune_eva01_patch_embeddings(
+                                    pruner,
+                                    eva_features.patch_tokens,
+                                    keep_ratio=float(kr),
+                                    sample_idx=si,
+                                    tag=sample.file_identifier,
+                                )
+                            embed_dim = int(local_embed.weight.shape[1])
+                            codebook_size = int(local_embed.weight.shape[0])
+                            enrich_pruner_metadata_flops(
+                                pname,
+                                meta,
+                                embed_dim=embed_dim,
+                                codebook_size=codebook_size,
+                            )
+
+                        mesh_tokens = select_eva01_mesh_tokens(eva_features.mesh_tokens, patch_indices)
+                        mesh_count = eva_features.mesh_token_count
+                        pruned_count = int(mesh_tokens.shape[0])
+                        t_gen = time.monotonic()
+                        log_phase(f"EVA01 generate {step_label} ({pruned_count}/{mesh_count} mesh tokens)")
+                        caption, elapsed, n_in, n_out = generate_eva01_caption_from_mesh_tokens(
                             model,
                             processor,
-                            sample.glb_path,
+                            mesh_tokens,
                             cfg.caption_prompt,
                             max_new_tokens=cfg.max_new_tokens,
                             temperature=cfg.temperature,
@@ -250,7 +374,12 @@ def _run_eva01_eval(
                             top_k=cfg.top_k,
                             device=device,
                         )
-                        pruned_count = mesh_count
+                        diag = meta.get("diagnostics") if isinstance(meta.get("diagnostics"), dict) else {}
+                        pruner_tf = float(diag.get("pruner_tflops", 0.0))
+                        meta.setdefault("mesh_value_count", eva_features.mesh_value_count)
+                        meta.setdefault("embedding_dim", embed_dim)
+                        meta.setdefault("codebook_size", codebook_size)
+
                     log_phase(
                         f"EVA01 {'mock ' if cfg.mock_model else ''}generate {step_label} done "
                         f"({time.monotonic() - t_gen:.1f}s, out_tokens={n_out})"
@@ -274,16 +403,11 @@ def _run_eva01_eval(
                             "generation_time_sec": float(elapsed),
                             "num_input_tokens": int(n_in),
                             "num_output_tokens": int(n_out),
-                            "pruner_tflops": 0.0,
+                            "pruner_tflops": pruner_tf,
                             "generated_caption": caption,
-                            "pruner_metadata": {
-                                "method": f"eva01_{'mock_' if cfg.mock_model else ''}{pname}",
-                                "backend": "eva01",
-                                "mock_model": bool(cfg.mock_model),
-                                "mesh_value_count": mesh_count,
-                            },
+                            "pruner_metadata": meta,
                             **llm_tf,
-                            "total_tflops": float(total_tflops) if total_tflops is not None else None,
+                            "total_tflops": float(pruner_tf + total_tflops) if total_tflops is not None else None,
                             **scores,
                         }
                     )
@@ -319,8 +443,13 @@ def main(argv: list[str] | None = None) -> int:
             print(str(exc), file=sys.stderr)
             return 2
 
+    eva_needs_vqvae = (
+        cfg.model_backend == "eva01"
+        and not cfg.mock_model
+        and any(p in EVA01_VQVAE_SPATIAL_PRUNERS for p in cfg.pruners)
+    )
     needs_cuda = cfg.device.startswith("cuda") or (
-        cfg.model_backend == "shapellm" and cfg.vqvae_device.startswith("cuda")
+        (cfg.model_backend == "shapellm" or eva_needs_vqvae) and cfg.vqvae_device.startswith("cuda")
     )
     if not torch.cuda.is_available() and needs_cuda:
         print("Warning: CUDA not available; falling back to CPU.", file=sys.stderr)
@@ -330,11 +459,11 @@ def main(argv: list[str] | None = None) -> int:
         device = resolve_torch_device(cfg.device)
         vqvae_dev = (
             resolve_torch_device(cfg.vqvae_device)
-            if cfg.model_backend == "shapellm"
+            if cfg.model_backend == "shapellm" or eva_needs_vqvae
             else torch.device("cpu")
         )
 
-    if cfg.model_backend == "shapellm":
+    if cfg.model_backend == "shapellm" or eva_needs_vqvae:
         init_cuda_for_eval(vqvae_dev, device)
 
     random.seed(cfg.seed)
@@ -360,6 +489,10 @@ def main(argv: list[str] | None = None) -> int:
                 torch_dtype=cfg.vlm_torch_dtype,
                 base_model_name_or_path=cfg.eva01_base_model_name_or_path,
             )
+            if eva_needs_vqvae:
+                print(f"Loading VQVAE for EVA01 spatial pruners (device={vqvae_dev})...")
+                vqvae = load_vqvae(vqvae_dev)
+                warmup_vqvae(vqvae, vqvae_dev, vlm_dev=device)
         else:
             print(f"Loading VQVAE (device={vqvae_dev})...")
             vqvae = load_vqvae(vqvae_dev)
@@ -409,7 +542,16 @@ def main(argv: list[str] | None = None) -> int:
     ensure_dir(cfg.output_dir)
 
     if cfg.model_backend == "eva01":
-        results = _run_eva01_eval(cfg, samples, model, processor, device)
+        results = _run_eva01_eval(
+            cfg,
+            samples,
+            model,
+            processor,
+            device,
+            vqvae=vqvae,
+            vqvae_dev=vqvae_dev,
+            eval_cfg_dir=eval_cfg_dir,
+        )
         return _finalize_results(cfg, results)
 
     results: list[dict] = []

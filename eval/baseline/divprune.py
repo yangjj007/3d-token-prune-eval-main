@@ -6,7 +6,7 @@ from typing import Any, Dict, Tuple
 
 import torch
 
-from eval.baseline._common import MESH_SEQ_LEN, gather_embeddings, require_vq_embeddings, target_keep_count
+from eval.baseline._common import gather_embeddings, require_vq_embeddings, target_keep_count
 from eval.pruners import BasePruner, register_pruner
 
 
@@ -68,13 +68,15 @@ class DivPrunePruner(BasePruner):
     ) -> Tuple[torch.Tensor, Dict[str, Any]]:
         embed = require_vq_embeddings(kwargs.get("vq_embeddings"))
         t = token_ids.detach().long().view(-1)
-        assert t.numel() == MESH_SEQ_LEN
-        k = target_keep_count(self.keep_ratio)
+        n = int(t.numel())
+        if n <= 0:
+            raise ValueError("divprune received an empty token sequence")
+        k = target_keep_count(self.keep_ratio, n)
         feats = gather_embeddings(embed, t)
-        idx = divprune_indices(feats, MESH_SEQ_LEN, None, k)
+        idx = divprune_indices(feats, n, None, k)
         idx = torch.unique(idx, sorted=True)
         if idx.numel() < k:
-            selected = torch.zeros(MESH_SEQ_LEN, dtype=torch.bool, device=idx.device)
+            selected = torch.zeros(n, dtype=torch.bool, device=idx.device)
             selected[idx] = True
             fill = torch.nonzero(~selected, as_tuple=False).view(-1)[: k - idx.numel()]
             idx = torch.cat([idx, fill]).sort().values

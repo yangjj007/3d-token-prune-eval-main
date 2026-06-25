@@ -105,7 +105,11 @@ def _estimate_pruner_flops_heuristic(
     codebook_size: int,
 ) -> float:
     """Return estimated pruner FLOPs (not TFLOPs)."""
-    n = MESH_SEQ_LEN
+    n = int(
+        meta.get("num_tokens_original")
+        or meta.get("num_eva_patches_original")
+        or MESH_SEQ_LEN
+    )
     d = max(1, embed_dim)
     v = max(1, codebook_size)
     k = int(meta.get("k", n))
