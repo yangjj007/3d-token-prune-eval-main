@@ -1,4 +1,12 @@
 import os
+import sys
+from pathlib import Path
+
+DEMO_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = DEMO_DIR.parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 import torch
 from threading import Thread
 import gradio as gr
@@ -17,6 +25,9 @@ import plotly.express as px
 import random
 import open3d as o3d
 from huggingface_hub import hf_hub_download
+
+EXAMPLES_DIR = DEMO_DIR / "examples"
+TEMPER_GLB = DEMO_DIR / "temper.glb"
 
 def _remove_image_special(text):
     text = text.replace('<ref>', '').replace('</ref>', '')
@@ -158,9 +169,9 @@ def predict(_chatbot,task_history,viewer_voxel,viewer_mesh,task_new,seed,top_k,t
                     texture_size=1024,    
                     verbose=False  
                 )
-                glb.export(f"temper.glb")
+                glb.export(str(TEMPER_GLB))
                 print("processing mesh over...")
-                yield _chatbot,fig,"temper.glb",task_new
+                yield _chatbot,fig,str(TEMPER_GLB),task_new
             else:
                 # image to 3d
                 with torch.no_grad():
@@ -175,9 +186,9 @@ def predict(_chatbot,task_history,viewer_voxel,viewer_mesh,task_new,seed,top_k,t
                     texture_size=1024,    
                     verbose=False  
                 )
-                glb.export(f"temper.glb")
+                glb.export(str(TEMPER_GLB))
                 print("processing mesh over...")
-                yield _chatbot,fig,"temper.glb",task_new
+                yield _chatbot,fig,str(TEMPER_GLB),task_new
         except:
             print("processing mesh...bug")
             yield _chatbot,fig,viewer_mesh,task_new
@@ -462,7 +473,7 @@ with gr.Blocks() as demo:
             )
             examples_image = gr.Examples(
                 label="image-to-3d examples",
-                examples=[os.path.join("examples", i) for i in os.listdir("examples")],
+                examples=[str(EXAMPLES_DIR / i) for i in sorted(os.listdir(EXAMPLES_DIR))],
                 inputs=[image_input],
                 examples_per_page = 20,
             )

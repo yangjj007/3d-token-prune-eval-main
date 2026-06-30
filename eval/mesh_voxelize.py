@@ -63,7 +63,7 @@ def rotate_points(points, axis="x", angle_deg=90):
 
 
 def load_vertices(filepath: str) -> np.ndarray:
-    """Match ``app.py`` voxelization: normalized mesh -> voxel centers -> x-rotation."""
+    """Match archived demo voxelization: normalized mesh -> voxel centers -> x-rotation."""
     mesh = convert_trimesh_to_open3d(_load_triangle_mesh(filepath))
     vertices = np.asarray(mesh.vertices)
     min_vals = vertices.min()

@@ -198,13 +198,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--results-json",
         type=Path,
-        default=REPO_ROOT / "eval_results_4gpu_fp16" / "merged" / "results.json",
+        default=REPO_ROOT.parent / "output" / "eval_results_4gpu_fp16" / "merged" / "results.json",
         help="Merged results.json path.",
     )
     parser.add_argument(
         "--summary-csv",
         type=Path,
-        default=REPO_ROOT / "eval_results_4gpu_fp16" / "merged" / "summary.csv",
+        default=REPO_ROOT.parent / "output" / "eval_results_4gpu_fp16" / "merged" / "summary.csv",
         help="Optional summary.csv path used to cross-check n_samples.",
     )
     parser.add_argument(

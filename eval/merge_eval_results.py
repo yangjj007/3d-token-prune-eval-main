@@ -5,11 +5,11 @@ recompute ``summary.csv`` and ``by_pruner/`` like ``run_eval``.
 Optimized for large outputs: parallel reads across inputs, optional ``orjson``
 serialization, compact (non-pretty) merged JSON, and parallel per-pruner writes.
 
-Usage (from repo root)::
+Usage (from ``3d-token-prune-eval-main``)::
 
     python -m eval.merge_eval_results \\
-      --inputs eval_results/gpu0 eval_results/gpu1 eval_results/gpu2 eval_results/gpu3 \\
-      --output-dir eval_results/merged
+      --inputs ../output/eval_results/gpu0 ../output/eval_results/gpu1 \\
+      --output-dir ../output/eval_results/merged
 """
 
 from __future__ import annotations

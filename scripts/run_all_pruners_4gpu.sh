@@ -2,14 +2,14 @@
 # Run all registered token pruners (including no_pruning baseline) on 4 GPUs in parallel,
 # then merge partial results into one directory.
 #
-# Requirements: bash, Linux/WSL2 + NVIDIA driver; run from repo root ShapeLLM-Omni-main.
+# Requirements: bash, Linux/WSL2 + NVIDIA driver; run from 3d-token-prune-eval-main.
 # VLM loads in FP16 via --vlm-torch-dtype float16 (omit that flag to use auto bf16/fp16).
 #
 # Usage:
 #   chmod +x scripts/run_all_pruners_4gpu.sh
 #   ./scripts/run_all_pruners_4gpu.sh
 # Or override env:
-#   DATA_CSV=data/metadata.csv GLB_DIR=data OUT_DIR=eval_results_fp16 ./scripts/run_all_pruners_4gpu.sh
+#   RUN_CONFIG=configs/runs/shapellm-full.yaml OUT_DIR=../output/eval_results_fp16 ./scripts/run_all_pruners_4gpu.sh
 
 set -euo pipefail
 
@@ -26,9 +26,9 @@ if [[ -d "/yangjunjie" ]]; then
 fi
 
 # --- User-tunable defaults ---
-DATA_CSV="${DATA_CSV:-data/metadata.csv}"
-GLB_DIR="${GLB_DIR:-data}"
-OUT_DIR="${OUT_DIR:-eval_results_4gpu_fp16}"
+PYTHON_BIN="${PYTHON_BIN:-python3}"
+RUN_CONFIG="${RUN_CONFIG:-configs/runs/shapellm-full.yaml}"
+OUT_DIR="${OUT_DIR:-../output/eval_results_4gpu_fp16}"
 EVAL_CONFIG_DIR="${EVAL_CONFIG_DIR:-configs/eval}"
 NUM_SAMPLES="${NUM_SAMPLES:--1}"
 # Comma-separated, must match README / registered pruners (baseline + proposed)
@@ -72,11 +72,11 @@ run_one() {
   CUDA_VISIBLE_DEVICES="$phys" \
   SHAPELLM_EVAL_LOG_DIR="$out_sub/logs" \
   SHAPELLM_EVAL_LOG_DEEP_EVERY="${SHAPELLM_EVAL_LOG_DEEP_EVERY:-20}" \
-  python -m eval.run_eval \
-    --data-csv "$DATA_CSV" \
-    --glb-dir "$GLB_DIR" \
+  "$PYTHON_BIN" -m eval.run_eval \
+    --config "$RUN_CONFIG" \
     --num-samples "$NUM_SAMPLES" \
     --output-dir "$out_sub" \
+    --run-log-file "$out_sub/eval_run.log" \
     --eval-config-dir "$EVAL_CONFIG_DIR" \
     --pruners "$pruners" \
     --keep-ratios "$KEEP_RATIOS" \
@@ -110,7 +110,7 @@ echo "Merging into $MERGED ..."
 # -u: unbuffered stdout so the [merge +Ns] progress lines stream live.
 # Compact JSON by default (orjson if available) -> 5-20x faster on huge results.json.
 # Override with MERGE_INDENT=2 for pretty output, MERGE_WORKERS=N for parallelism.
-python -u -m eval.merge_eval_results \
+"$PYTHON_BIN" -u -m eval.merge_eval_results \
   --inputs "$PART0" "$PART1" "$PART2" "$PART3" \
   --output-dir "$MERGED" \
   ${MERGE_DEDUPE:+--dedupe} \

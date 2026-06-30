@@ -40,8 +40,8 @@ def _process_one(glb_path: str, file_identifier: str, mesh_cache_dir: str) -> di
 
 def main() -> int:
     p = argparse.ArgumentParser(description="Precompute mesh voxel coords (.npz cache)")
-    p.add_argument("--data-csv", type=str, default="data/metadata.csv")
-    p.add_argument("--glb-dir", type=str, default="data")
+    p.add_argument("--data-csv", type=str, default="../data/metadata.csv")
+    p.add_argument("--glb-dir", type=str, default="../data")
     p.add_argument("--mesh-cache-dir", type=str, required=True)
     p.add_argument("--num-samples", type=int, default=-1)
     p.add_argument("--num-workers", type=int, default=4)

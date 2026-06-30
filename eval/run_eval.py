@@ -1,9 +1,9 @@
 """
 Run mesh token pruning caption evaluation.
 
-Usage (from repository root ``ShapeLLM-Omni-main``)::
+Usage (from ``3d-token-prune-eval-main``)::
 
-    python -m eval.run_eval --glb-dir sampled_objaverse_data --num-samples 1
+    python -m eval.run_eval --config configs/runs/eva01-full.yaml
 
 Ensure ``eval.pruners.baseline`` and ``eval.baseline`` are importable to register
 built-in pruners; add new modules under those packages and import them here.
@@ -75,6 +75,40 @@ from eval.utils import (
 
 # Register all pruners (lazy loader also runs inside get_pruner_class)
 ensure_pruners_loaded()
+
+
+class _TeeStream:
+    def __init__(self, *streams):
+        self._streams = streams
+
+    def write(self, data: str) -> int:
+        for stream in self._streams:
+            stream.write(data)
+        return len(data)
+
+    def flush(self) -> None:
+        for stream in self._streams:
+            stream.flush()
+
+    def isatty(self) -> bool:
+        return any(getattr(stream, "isatty", lambda: False)() for stream in self._streams)
+
+
+def _apply_config_env(cfg: EvalConfig) -> None:
+    for key, value in cfg.env.items():
+        os.environ[str(key)] = str(value)
+
+
+def _setup_run_log(path: str) -> None:
+    if not path:
+        return
+    parent = os.path.dirname(path)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+    log_f = open(path, "w", encoding="utf-8")
+    sys.stdout = _TeeStream(sys.stdout, log_f)
+    sys.stderr = _TeeStream(sys.stderr, log_f)
+    print(f"run_log_file={path}", flush=True)
 
 
 def load_vqvae(device: torch.device):
@@ -431,6 +465,8 @@ def _run_eva01_eval(
 def main(argv: list[str] | None = None) -> int:
     cfg = EvalConfig.from_args(argv)
     cfg = resolve_repo_paths(cfg, REPO_ROOT)
+    _apply_config_env(cfg)
+    _setup_run_log(cfg.run_log_file)
     eval_cfg_dir = Path(cfg.eval_config_dir)
 
     for name in cfg.pruners:

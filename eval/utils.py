@@ -37,7 +37,7 @@ def tokens_to_mesh_string(token_ids: Sequence[int] | torch.Tensor) -> str:
 
 
 def tokens_to_mesh_string_fixed1024(token_list: Sequence[int]) -> str:
-    """Original app.py behavior: exactly 1024 mesh slots (legacy)."""
+    """Original demo behavior: exactly 1024 mesh slots (legacy)."""
     assert len(token_list) == 1024
     return tokens_to_mesh_string(token_list)
 

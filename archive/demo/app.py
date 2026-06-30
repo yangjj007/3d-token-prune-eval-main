@@ -1,5 +1,13 @@
-import gradio as gr
 import os
+import sys
+from pathlib import Path
+
+DEMO_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = DEMO_DIR.parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+import gradio as gr
 os.environ['SPCONV_ALGO'] = 'native'
 from gradio_litmodel3d import LitModel3D
 import warp as wp
@@ -25,6 +33,7 @@ from huggingface_hub import hf_hub_download
 import numpy as np
 HF_TOKEN = os.environ.get("HF_TOKEN", None)
 TMP_DIR = "/tmp/ShapeLLM-Omni-demo"
+EXAMPLES_DIR = DEMO_DIR / "examples"
 os.makedirs(TMP_DIR, exist_ok=True)
 
 def _remove_image_special(text):
@@ -512,7 +521,7 @@ with gr.Blocks() as demo:
             )
             examples_image = gr.Examples(
                 label="image-to-3d examples",
-                examples=[os.path.join("examples", i) for i in os.listdir("examples")],
+                examples=[str(EXAMPLES_DIR / i) for i in sorted(os.listdir(EXAMPLES_DIR))],
                 inputs=[image_input],
                 fn=add_image_prefix,
                 outputs=[image_input,query],

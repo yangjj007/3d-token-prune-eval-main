@@ -15,7 +15,7 @@ from transformers.generation.logits_process import (
 
 
 def _transform_messages(original_messages: List[Dict]) -> List[Dict]:
-    """Same structure as ``app.py`` ``_transform_messages``."""
+    """Same structure as archived demo ``_transform_messages``."""
     transformed_messages = []
     for message in original_messages:
         new_content = []

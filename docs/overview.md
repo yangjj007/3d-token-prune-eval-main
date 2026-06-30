@@ -170,16 +170,21 @@ loss = F.mse_loss(pred, target)
 
 ### 环境配置
 ```bash
+cd /data/xujinyi/junjie_llm/3d-token-prune-eval-main
+conda activate token-prune-shapellm
 pip install -r requirements.txt
 ```
 
 ### 推理启动
 ```bash
-python app.py
+cd /data/xujinyi/junjie_llm/3d-token-prune-eval-main
+conda activate token-prune-shapellm
+python archive/demo/app.py
 ```
 
 ### 训练配置
-- 使用configs目录下的JSON配置文件
+- 当前评测配置使用 `configs/runs/*.yaml` 与 `configs/eval/*.json`
+- 原始生成 demo 的 JSON 配置已归档到 `archive/demo/configs/generation/`
 - 支持分布式训练（DDP）
 - 弹性内存管理
 

@@ -347,8 +347,8 @@ def _pairwise_rows(
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Diagnose ShapeLLM 3D token pruning behavior.")
-    parser.add_argument("--data-csv", type=str, default="data/metadata.csv")
-    parser.add_argument("--glb-dir", type=str, default="sampled_objaverse_data")
+    parser.add_argument("--data-csv", type=str, default="../data/metadata.csv")
+    parser.add_argument("--glb-dir", type=str, default="../data")
     parser.add_argument("--num-samples", type=int, default=5)
     parser.add_argument("--keep-ratios", type=str, default="1.0,0.75,0.5,0.25,0.1")
     parser.add_argument("--methods", type=str, default=",".join(DEFAULT_METHODS))
@@ -359,7 +359,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--eval-config-dir", type=str, default="configs/eval")
     parser.add_argument("--mesh-cache-dir", type=str, default="")
     parser.add_argument("--mesh-cache-readonly", action="store_true")
-    parser.add_argument("--output-dir", type=Path, default=REPO_ROOT / "logs" / "pruner_effects")
+    parser.add_argument("--output-dir", type=Path, default=REPO_ROOT.parent / "output" / "logs" / "pruner_effects")
     parser.add_argument("--with-vlm", action="store_true")
     parser.add_argument("--model-id", type=str, default="yejunliang23/ShapeLLM-7B-omni")
     parser.add_argument("--load-in-4bit", action="store_true", help="Load VLM in 4-bit NF4 for single-GPU smoke tests.")

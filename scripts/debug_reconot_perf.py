@@ -17,7 +17,7 @@ ReconOT 性能退化诊断工具。
       --kr 0.75 --repeat 3
 
   # 3) 从日志中取最慢的 N 个 mesh 批量 profile
-  python scripts/debug_reconot_perf.py profile-slowest --log logs/reconot.log --top 10
+  python scripts/debug_reconot_perf.py profile-slowest --log ../output/logs/reconot.log --top 10
 
   # 4) 检测长跑漂移：同一 mesh 连续跑 N 次看是否变慢（内存/日志膨胀）
   python scripts/debug_reconot_perf.py drift-test --mesh-id <id> --repeat 20
@@ -130,16 +130,17 @@ def _record_priority(rec: PruneRecord) -> Tuple[int, float, float]:
 def discover_log_paths(repo_root: Path, *, run_filter: str = "") -> List[Path]:
     """常见 eval / autoresearch 日志路径（按修改时间倒序）。"""
     ar = repo_root.parent / "autoresearch-rl-covenant"
-    roots = [repo_root, ar] if ar.is_dir() else [repo_root]
+    output_root = repo_root.parent / "output"
+    roots = [repo_root, output_root, ar] if ar.is_dir() else [repo_root, output_root]
     globs = [
         "**/eval_run.log",
         "**/logs/reconot.log",
         "logs/reconot.log",
         "logs/*.master.log",
-        "artifacts/eval-reconot/runs/**/eval_run.log",
-        "artifacts/eval-reconot/runs/**/logs/reconot.log",
         "eval_results*/**/eval_run.log",
         "eval_results*/**/logs/reconot.log",
+        "artifacts/eval-reconot/runs/**/eval_run.log",
+        "artifacts/eval-reconot/runs/**/logs/reconot.log",
     ]
     if ar.is_dir():
         globs.append("logs/*.master.log")
@@ -329,7 +330,7 @@ def cmd_analyze_log(args: argparse.Namespace) -> int:
         print("ERROR: no log files found.", file=sys.stderr)
         print(
             "Hints:\n"
-            "  - eval 默认写 artifacts/.../fast/eval_run.log 与 .../logs/reconot.log\n"
+            "  - eval 默认写 ../output/.../eval_run.log 与 ../output/.../logs/reconot.log\n"
             "  - autoresearch master: ../autoresearch-rl-covenant/logs/*.master.log\n"
             "  - 使用: python scripts/debug_reconot_perf.py analyze-log --discover\n"
             "  - 或:   --log ../autoresearch-rl-covenant/logs/eval-reconot-*.master.log",
@@ -761,8 +762,8 @@ def main() -> int:
     p_prof.add_argument("--mesh-id", required=True)
     p_prof.add_argument("--kr", type=float, default=0.75)
     p_prof.add_argument("--repeat", type=int, default=1)
-    p_prof.add_argument("--glb-dir", default=str(REPO_ROOT / "data"))
-    p_prof.add_argument("--mesh-cache-dir", default=str(REPO_ROOT / "data" / "mesh_voxel_cache"))
+    p_prof.add_argument("--glb-dir", default=str(REPO_ROOT.parent / "data"))
+    p_prof.add_argument("--mesh-cache-dir", default=str(REPO_ROOT.parent / "data" / "mesh_voxel_cache"))
     p_prof.add_argument("--vqvae-device", default="cuda:0")
     p_prof.add_argument(
         "--fast-diagnostics",
@@ -772,20 +773,20 @@ def main() -> int:
     p_prof.add_argument("--json-out", default="")
 
     p_slow = sub.add_parser("profile-slowest", help="Profile top-N slowest from log")
-    p_slow.add_argument("--log", default=str(REPO_ROOT / "logs" / "reconot.log"))
+    p_slow.add_argument("--log", default=str(REPO_ROOT.parent / "output" / "logs" / "reconot.log"))
     p_slow.add_argument("--top", type=int, default=10)
     p_slow.add_argument("--max-logs", type=int, default=1)
     p_slow.add_argument("--run", default="")
-    p_slow.add_argument("--glb-dir", default=str(REPO_ROOT / "data"))
-    p_slow.add_argument("--mesh-cache-dir", default=str(REPO_ROOT / "data" / "mesh_voxel_cache"))
+    p_slow.add_argument("--glb-dir", default=str(REPO_ROOT.parent / "data"))
+    p_slow.add_argument("--mesh-cache-dir", default=str(REPO_ROOT.parent / "data" / "mesh_voxel_cache"))
     p_slow.add_argument("--vqvae-device", default="cuda:0")
     p_slow.add_argument("--json-out", default="")
 
     p_drift = sub.add_parser("drift-test", help="Repeat same mesh to detect runtime drift")
     p_drift.add_argument("--mesh-id", required=True)
     p_drift.add_argument("--repeat", type=int, default=20)
-    p_drift.add_argument("--glb-dir", default=str(REPO_ROOT / "data"))
-    p_drift.add_argument("--mesh-cache-dir", default=str(REPO_ROOT / "data" / "mesh_voxel_cache"))
+    p_drift.add_argument("--glb-dir", default=str(REPO_ROOT.parent / "data"))
+    p_drift.add_argument("--mesh-cache-dir", default=str(REPO_ROOT.parent / "data" / "mesh_voxel_cache"))
     p_drift.add_argument("--vqvae-device", default="cuda:0")
     p_drift.add_argument("--json-out", default="")
 

@@ -1,8 +1,28 @@
 # Token 剪枝评测（eval）
 
+## 文档索引
+
+- [ShapeLLM 原始说明](docs/ShapeLLM-README.md)
+- [项目概览](docs/overview.md)
+- [如何适配其他评估及算法框架](docs/如何适配其他评估及算法框架.md)
+- [归档 demo 说明](archive/demo/README.md)
+
+## 当前目录结构
+
+- `eval/`：评测主流程、模型后端、指标、pruner 注册与实现。
+- `configs/runs/`：实验跑测 YAML，作为当前推荐入口。
+- `configs/eval/`：各剪枝算法的 JSON 超参。
+- `configs/vae/`：VAE/Trellis 相关配置，仍是运行依赖。
+- `scripts/`：批量跑测、预计算、结果分析脚本。
+- `tests/`：轻量单元测试与 mock 测试。
+- `trellis/`、`extensions/`、`dataset_toolkits/`：ShapeLLM/Trellis 运行支撑代码。
+- `docs/`：项目说明与迁移文档。
+- `archive/demo/`：原始 Gradio demo、素材、示例图和 generation 配置；当前评测不依赖。
+- `archive/manual/`：一次性手动检查脚本，不参与自动测试。
+
 ## 环境与前缀（Linux）
 
-在仓库根目录 `eval-main` 下执行。若遇 OpenMP 与 MKL 冲突，可先设置：
+在评测目录 `3d-token-prune-eval-main` 下执行。若遇 OpenMP 与 MKL 冲突，可先设置：
 
 ```bash
 export KMP_DUPLICATE_LIB_OK=TRUE
@@ -12,6 +32,12 @@ export SHAPELLM_EVAL_LIGHT=1
 
 （`run_eval.py` 内已对后两项设默认，一般无需重复导出。）
 
+如果当前 shell 里 `conda activate` 不可用，先按服务器实际安装位置初始化 conda，例如：
+
+```bash
+source ~/miniconda3/etc/profile.d/conda.sh
+```
+
 ### 硬件与精度
 
 - 需要 **Linux + NVIDIA GPU + CUDA**，Python 环境与 `requirements.txt` 一致。
@@ -20,90 +46,54 @@ export SHAPELLM_EVAL_LIGHT=1
 
 ## 数据准备
 
-- `data/metadata.csv`：含 `file_identifier` 与 `captions`（JSON 数组字符串）。
+- `../data/metadata.csv`：含 `file_identifier` 与 `captions`（JSON 数组字符串）。
 - 将每个样本的网格放在 `--glb-dir` 下，文件名为 `{file_identifier}.glb`。
-- `--glb-dir` 指向实际 `.glb` 目录即可（如 `data`）。
+- `--glb-dir` 指向实际 `.glb` 目录即可（当前为 `../data`）。
 
-## 一键跑 baseline（双卡示例）
+## YAML 跑测配置
 
-VLM 在 `cuda:0`，VQVAE 编码在 `cuda:1`（单卡时两者都用 `cuda:0`）：
+实验参数统一放在 `configs/runs/*.yaml`，路径均以 `3d-token-prune-eval-main` 为根目录解析。常用配置：
+
+- `configs/runs/shapellm-full.yaml`
+- `configs/runs/eva01-full.yaml`
+- `configs/runs/eva01-mock.yaml`
+- `configs/runs/loco3d.yaml`
+
+ShapeLLM 跑测：
 
 ```bash
-python -m eval.run_eval \
-  --data-csv data/metadata.csv \
-  --glb-dir data \
-  --num-samples 10 \
-  --output-dir eval_results \
-  --eval-config-dir configs/eval \
-  --vlm-torch-dtype bfloat16 \
-  --device cuda:0 \
-  --vqvae-device cuda:1 \
-  --pruners no_pruning,random,uniform,divprune,apet,otprune,tome,fastv_mesh \
-  --keep-ratios 0.75,0.5,0.25,0.1
-
-python -m eval.run_eval \
-  --data-csv data/metadata.csv \
-  --glb-dir data \
-  --num-samples 10 \
-  --output-dir eval_results \
-  --eval-config-dir configs/eval \
-  --vlm-torch-dtype bfloat16 \
-  --device cuda:0 \
-  --vqvae-device cuda:1 \
-  --pruners no_pruning \
-  --keep-ratios 1.0
+cd /data/xujinyi/junjie_llm/3d-token-prune-eval-main
+conda activate token-prune-shapellm
+python -u -m eval.run_eval --config configs/runs/shapellm-full.yaml
 ```
 
 说明：
 
-- **`--output-dir`**：生成 `results.json` 与 `summary.csv`。
-- **`--eval-config-dir`**：加载 `configs/eval/{pruner}.json` 中的超参。
+- **`output_dir`**：生成 `results.json` 与 `summary.csv`。
+- **`run_log_file`**：自动保存原来需要 `tee` 才能得到的 `eval_run.log`。
+- **`eval_config_dir`**：加载 `configs/eval/{pruner}.json` 中的超参。
 - **`no_pruning`** 仅在 `keep_ratio=1.0` 时运行。
-- 可选：`--vqvae-device cpu` 减轻 GPU 显存压力。
+- 可选：把 YAML 里的 `vqvae_device` 改为 `cpu` 可减轻 GPU 显存压力。
 
 ## 模型底座后端
 
 默认后端仍是 ShapeLLM：
 
 ```bash
-python -m eval.run_eval --model-backend shapellm ...
+cd /data/xujinyi/junjie_llm/3d-token-prune-eval-main
+conda activate token-prune-shapellm
+python -u -m eval.run_eval --config configs/runs/shapellm-full.yaml
 ```
 
 EVA01 后端现在支持同一套 token prune 注册表。普通 embedding 方法直接剪 EVA01 的 512 个 mesh patch token；空间方法会按需加载 VQVAE，先在 1024 latent token 上运行原 pruner，再映射回 EVA01 patch token：
 
 ```bash
-python -m eval.run_eval \
-  --model-backend eva01 \
-  --data-csv data/metadata.csv \
-  --glb-dir data \
-  --num-samples 10 \
-  --output-dir eval_results_eva01 \
-  --pruners no_pruning,random,uniform,divprune,apet,otprune,tome,fastv_mesh,loco3d,octree_merge,runlength_curve,reconot,loco3d_dpp,loco3d_nonempty_dpp \
-  --keep-ratios 1.0,0.75,0.5,0.25,0.1 \
-  --device cuda:0 \
-  --vqvae-device cuda:1
+cd /data/xujinyi/junjie_llm/3d-token-prune-eval-main
+conda activate token-prune-eva01
+python -u -m eval.run_eval --config configs/runs/eva01-full.yaml
 ```
 
-Formal EVA01 baseline launch command (real model; loads OpenEVA and the EVA01 checkpoint):
-
-```bash
-mkdir -p "eval_results_eva01/logs"
-SHAPELLM_ENABLE_SEMANTIC_METRICS=0 python -u -m eval.run_eval \
-  --model-backend eva01 \
-  --data-csv data/metadata.csv \
-  --glb-dir data \
-  --num-samples -1 \
-  --output-dir "eval_results_eva01" \
-  --pruners no_pruning,random,uniform,divprune,apet,otprune,tome,fastv_mesh,loco3d,octree_merge,runlength_curve,reconot,loco3d_dpp,loco3d_nonempty_dpp \
-  --keep-ratios 1.0,0.75,0.5,0.25,0.1 \
-  --device cuda:0 \
-  --vqvae-device cuda:1 \
-  --vlm-torch-dtype bfloat16 \
-  --seed 42 \
-  2>&1 | tee "eval_results_eva01/eval_run.log"
-```
-
-If your local OpenEVA LoRA setup requires an explicit base model, add `--eva01-base-model-name-or-path /path/to/base-model`.
+If your local OpenEVA LoRA setup requires an explicit base model, set `eva01_base_model_name_or_path` in the YAML.
 
 说明：
 
@@ -115,10 +105,12 @@ If your local OpenEVA LoRA setup requires an explicit base model, add `--eva01-b
 - For local CLI/output-contract debugging across all EVA01 baselines, use mock mode; it does not load or download any model:
 
 ```bash
-bash scripts/run_eva01_baselines_debug.sh
+cd /data/xujinyi/junjie_llm/3d-token-prune-eval-main
+conda activate token-prune-shapellm
+python -u -m eval.run_eval --config configs/runs/eva01-mock.yaml
 ```
 
-The script runs all registered EVA01 baseline/proposed pruners and writes outputs to `artifacts/eva01-baseline-debug/`.
+The mock config runs all registered EVA01 baseline/proposed pruners and writes outputs to `../output/eva01-baseline-debug/`.
 
 ## Baseline 融合状态
 
@@ -133,8 +125,9 @@ The script runs all registered EVA01 baseline/proposed pruners and writes output
 ## 精简命令（loco3d）
 
 ```bash
-mkdir -p "eval_results_loco3d/logs"
-CUDA_VISIBLE_DEVICES=0,1 SHAPELLM_EVAL_LOG_DIR="eval_results_loco3d/logs" python -u -m eval.run_eval   --data-csv data/metadata.csv   --glb-dir data   --num-samples -1   --output-dir "eval_results_loco3d"   --eval-config-dir configs/eval   --pruners loco3d   --keep-ratios 0.75,0.5,0.25,0.1   --vlm-torch-dtype bfloat16   --seed 42   --device cuda:0   --vqvae-device cuda:1   2>&1 | tee "eval_results_loco3d/eval_run.log"
+cd /data/xujinyi/junjie_llm/3d-token-prune-eval-main
+conda activate token-prune-shapellm
+python -u -m eval.run_eval --config configs/runs/loco3d.yaml
 ```
 
 ## 依赖提示

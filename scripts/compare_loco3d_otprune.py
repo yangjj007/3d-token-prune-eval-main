@@ -8,15 +8,15 @@ reconot 用重构误差引导的 q 加权 DPP/OT（纯 embedding，无空间先�
 脚本对三者都算集合/空间指标，并分别用熵与 embedding 邻域误差做 rank/独占区域分析。
 可选 --with-vlm：额外跑 ShapeLLM 生成 caption，并记录 BLEU/ROUGE（显存占用大）。
 
-用法（在 eval-main 仓库根目录）::
+用法（在 3d-token-prune-eval-main 目录）::
 
 python scripts/compare_loco3d_otprune.py \
-    --data-csv data/metadata.csv \
-    --glb-dir data \
+    --data-csv ../data/metadata.csv \
+    --glb-dir ../data \
     --num-samples 5 \
     --keep-ratios 0.75,0.5,0.25,0.1 \
     --vqvae-device cuda:0 \
-    --log-file logs/compare_loco3d_otprune.log
+    --log-file ../output/logs/compare_loco3d_otprune.log
 
 双卡时 VLM 用 cuda:0、VQVAE 用 cuda:1::
 
@@ -989,8 +989,8 @@ def _aggregate_mean(rows: List[Dict[str, float]], key: str) -> float:
 
 def main() -> int:
     p = argparse.ArgumentParser(description="对比 loco3d / otprune / reconot 剪枝（详细指标 + log）")
-    p.add_argument("--data-csv", type=str, default="data/metadata.csv")
-    p.add_argument("--glb-dir", type=str, default="sampled_objaverse_data")
+    p.add_argument("--data-csv", type=str, default="../data/metadata.csv")
+    p.add_argument("--glb-dir", type=str, default="../data")
     p.add_argument("--num-samples", type=int, default=5)
     p.add_argument("--keep-ratios", type=str, default="0.75,0.5,0.25,0.1")
     p.add_argument("--methods", type=str, default="loco3d,otprune,reconot,random")
@@ -1001,7 +1001,7 @@ def main() -> int:
     p.add_argument("--eval-config-dir", type=str, default="configs/eval")
     p.add_argument("--mesh-cache-dir", type=str, default="")
     p.add_argument("--mesh-cache-readonly", action="store_true")
-    p.add_argument("--log-file", type=str, default="", help="人类可读 log；默认 logs/compare_loco3d_otprune_<ts>.log")
+    p.add_argument("--log-file", type=str, default="", help="人类可读 log；默认 ../output/logs/compare_loco3d_otprune_<ts>.log")
     p.add_argument("--jsonl-file", type=str, default="", help="机器可读 jsonl；默认同目录 .jsonl")
     p.add_argument("--with-vlm", action="store_true", help="加载 VLM 并生成 caption（慢、占显存）")
     p.add_argument("--model-id", type=str, default="yejunliang23/ShapeLLM-7B-omni")
@@ -1023,7 +1023,7 @@ def main() -> int:
     _require_pruners(methods)
 
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_path = Path(args.log_file) if args.log_file else _REPO_ROOT / "logs" / f"compare_loco3d_otprune_{ts}.log"
+    log_path = Path(args.log_file) if args.log_file else _REPO_ROOT.parent / "output" / "logs" / f"compare_loco3d_otprune_{ts}.log"
     jsonl_path = (
         Path(args.jsonl_file)
         if args.jsonl_file

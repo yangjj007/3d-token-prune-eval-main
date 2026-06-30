@@ -32,7 +32,7 @@
 https://github.com/user-attachments/assets/f77bb981-15ef-4546-ae1a-9baf05dc8002
 
 <p align="center">
-    <img src="assets/head.jpg">
+    <img src="../archive/demo/assets/head.jpg">
 </p>
 
 ## Release
@@ -42,19 +42,23 @@ https://github.com/user-attachments/assets/f77bb981-15ef-4546-ae1a-9baf05dc8002
 
 ## Installation
 Please set up the Python environment following [TRELLIS](https://github.com/microsoft/TRELLIS/tree/main) and [QWEN2.5-vl](https://github.com/QwenLM/Qwen2.5-VL), or you can create by:
-```
+```bash
+cd /data/xujinyi/junjie_llm/3d-token-prune-eval-main
+conda activate token-prune-shapellm
 pip install -r requirements.txt
 ```
 
 ## Inference
 We suggest using Gradio UI for visualizing inference.
-```
-python app.py
+```bash
+cd /data/xujinyi/junjie_llm/3d-token-prune-eval-main
+conda activate token-prune-shapellm
+python archive/demo/app.py
 ```
 
 https://github.com/user-attachments/assets/edb2b828-b65c-40f6-88da-9f5094c40b2e
 
-For templates used for different tasks, please refer to the [templates.txt](https://github.com/JAMESYJL/ShapeLLM-Omni/blob/main/templates.txt)
+For templates used for different tasks, please refer to the archived local copy at [templates.txt](../archive/demo/templates.txt) or the upstream [templates.txt](https://github.com/JAMESYJL/ShapeLLM-Omni/blob/main/templates.txt).
 
 ## Qualitative result
 
@@ -89,4 +93,3 @@ Also, we invite you to explore our latest work — [Nano3D](https://jamesyjl.git
   year={2025}
 }
 ```
-

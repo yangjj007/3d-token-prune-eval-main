@@ -1,0 +1,30 @@
+model_backend: eva01  # 模型后端: EVA01
+mock_model: true  # 启用 mock 后端
+data_csv: ../data/metadata.csv  # 样本元数据 CSV
+glb_dir: ../data  # GLB 网格目录
+num_samples: 3  # mock 调试样本数
+output_dir: ../output/eva01-baseline-debug  # 调试结果目录
+run_log_file: ../output/eva01-baseline-debug/eval_run.log  # 运行日志文件
+eval_config_dir: configs/eval  # 剪枝器超参目录
+pruners:  # 待评测剪枝器列表
+  - no_pruning  # 不剪枝基线
+  - random  # 随机保留 token
+  - uniform  # 均匀间隔保留
+  - divprune  # 多样性保留
+  - apet  # 近似误差保留
+  - otprune  # OT/DPP 选择
+  - tome  # 相似 token 合并
+  - fastv_mesh  # FastV mesh 变体
+  - loco3d  # 3D 空间剪枝
+  - octree_merge  # 八叉树块剪枝
+  - runlength_curve  # 空间曲线游程剪枝
+  - reconot  # 重构误差+OT 剪枝
+  - loco3d_dpp  # loco3d+DPP 多样性
+  - loco3d_nonempty_dpp  # 非空 token+DPP
+keep_ratios: [1.0, 0.75, 0.5, 0.25, 0.1]  # token 保留比例
+device: cpu  # mock 主设备
+vqvae_device: cpu  # mock VQVAE 设备
+mesh_prefetch_workers: 0  # 禁用并行预取
+seed: 42  # 随机种子
+env:  # 运行时环境变量
+  SHAPELLM_ENABLE_SEMANTIC_METRICS: "0"  # 关闭语义指标

@@ -6,6 +6,7 @@ imageio==2.36.1
 imageio-ffmpeg==0.5.1
 tqdm==4.67.1
 easydict==1.13
+PyYAML>=5.4.1
 opencv-python-headless==4.10.0.84
 scipy==1.14.1
 rembg==2.0.60

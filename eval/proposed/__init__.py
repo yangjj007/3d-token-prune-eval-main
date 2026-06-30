@@ -1,4 +1,4 @@
-"""Tier-1 proposed mesh token pruners (see ShapeLLM-Omni-Token-Pruning-Proposals.md)."""
+"""Tier-1 proposed mesh token pruners (see ../../../docs/research/ShapeLLM-Omni-Token-Pruning-Proposals.md)."""
 
 from __future__ import annotations
 
