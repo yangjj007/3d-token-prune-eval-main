@@ -7,6 +7,19 @@
 - [如何适配其他评估及算法框架](docs/如何适配其他评估及算法框架.md)
 - [归档 demo 说明](archive/demo/README.md)
 
+## junjie_llm 顶层结构
+
+`/data/xujinyi/junjie_llm` 是当前工作区根目录，主要目录如下：
+
+- `3d-token-prune-eval-main/`：当前主项目，包含 3D token 剪枝评测代码、配置、脚本和项目内文档。
+- `data/`：评测数据目录，包含 `metadata.csv`、`.glb` 网格文件、`mesh_voxel_cache/` 和 `raw/` 等数据资源。
+- `output/`：跑测输出目录，保存 `results.json`、`summary.csv`、日志和分 pruner 结果。
+- `model/`：模型与缓存目录，包含 `hf-cache/` 和 `OpenEVA/` 等本地模型资源。
+- `algorithm/`：外部剪枝算法参考源码目录，用于对照和迁移思路；当前评测实际调用的是本项目 `eval/` 下已接入的实现。
+- `docs/`：工作区级文档，包含项目进展、研究方案和相关工作整理。
+- `github/`：外部辅助仓库目录，例如 autoresearch 系列实验/自动化相关代码。
+- `.agents/`、`.codex/`、`.git/`：工具与版本管理元数据，一般无需手动修改。
+
 ## 当前目录结构
 
 - `eval/`：评测主流程、模型后端、指标、pruner 注册与实现。
